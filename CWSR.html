@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Car Wash Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+        .car-wash-bay {
+            width: 100%;
+            height: 100px;
+            background-color: #e2e8f0;
+            border: 4px solid #4a5568;
+            border-radius: 8px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: inset 0 0 15px rgba(0,0,0,0.2);
+            margin: 0 auto;
+        }
+        .car {
+            position: absolute;
+            left: -100px; /* Start off-screen */
+            top: 50%;
+            transform: translateY(-50%);
+            width: 80px;
+            height: 40px;
+            transition: left 2s linear;
+        }
+        .car-svg {
+            width: 100%;
+            height: 100%;
+        }
+        .stage-indicator {
+            height: 100%;
+            background-color: #cbd5e0;
+            transition: all 0.5s ease-in-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0.7;
+        }
+        .stage-indicator.active {
+            opacity: 1;
+        }
+        .status-light {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #cbd5e0;
+            transition: background-color 0.3s;
+        }
+        .status-light.on {
+            background-color: #10b981;
+        }
+        .status-light.off {
+            background-color: #ef4444;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex flex-col items-center justify-center min-h-screen p-4">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-4xl w-full flex flex-col gap-8">
+        <!-- Main Title -->
+        <h1 class="text-3xl font-bold text-center text-gray-800">Car Wash Sequence Simulator</h1>
+
+        <!-- Simulator Container -->
+        <div class="flex flex-col items-center gap-6">
+            <!-- Sensor Indicators -->
+            <div class="flex justify-between w-full max-w-[500px] text-xs font-semibold text-gray-600">
+                <div class="flex flex-col items-center gap-1">
+                    <div id="sensor-entry" class="status-light"></div>
+                    <span>Entry Sensor</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                    <div id="sensor-wash" class="status-light"></div>
+                    <span>Wash Sensor</span>
+                </div>
+                <div class="flex flex-col items-center gap-1">
+                    <div id="sensor-exit" class="status-light"></div>
+                    <span>Exit Sensor</span>
+                </div>
+            </div>
+
+            <!-- The Car Wash Bay -->
+            <div class="car-wash-bay max-w-[500px]">
+                <div class="flex h-full">
+                    <div id="stage-soap" class="stage-indicator bg-blue-300">
+                        <span class="text-xs font-bold text-gray-700">SOAP</span>
+                    </div>
+                    <div id="stage-rinse" class="stage-indicator bg-green-300">
+                        <span class="text-xs font-bold text-gray-700">RINSE</span>
+                    </div>
+                    <div id="stage-dry" class="stage-indicator bg-yellow-300">
+                        <span class="text-xs font-bold text-gray-700">DRY</span>
+                    </div>
+                </div>
+                <div id="car" class="car">
+                    <!-- Simple car SVG for visual representation -->
+                    <svg class="car-svg" viewBox="0 0 100 50" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="0" y="20" width="100" height="20" rx="5" fill="#4a5568"/>
+                        <rect x="20" y="5" width="60" height="15" rx="5" fill="#4a5568"/>
+                        <circle cx="25" cy="40" r="8" fill="#2d3748"/>
+                        <circle cx="75" cy="40" r="8" fill="#2d3748"/>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- Status and Control Panel -->
+            <div class="flex flex-col gap-4 w-full">
+                <!-- Status Display -->
+                <div class="bg-gray-50 p-4 rounded-xl shadow-inner text-center">
+                    <p class="text-sm font-medium text-gray-700">Current State</p>
+                    <span id="status-display" class="text-2xl font-bold text-blue-600">IDLE</span>
+                </div>
+
+                <!-- Control Buttons -->
+                <div class="flex justify-center gap-4">
+                    <button id="start-btn" class="px-6 py-3 rounded-full bg-green-500 text-white font-bold hover:bg-green-600 transition shadow-lg">Start</button>
+                    <button id="reset-btn" class="px-6 py-3 rounded-full bg-orange-500 text-white font-bold hover:bg-orange-600 transition shadow-lg">Reset</button>
+                    <button id="estop-btn" class="px-6 py-3 rounded-full bg-red-500 text-white font-bold hover:bg-red-600 transition shadow-lg">E-Stop</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const car = document.getElementById('car');
+        const statusDisplay = document.getElementById('status-display');
+        const startBtn = document.getElementById('start-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const estopBtn = document.getElementById('estop-btn');
+        const sensorEntry = document.getElementById('sensor-entry');
+        const sensorWash = document.getElementById('sensor-wash');
+        const sensorExit = document.getElementById('sensor-exit');
+        const stageSoap = document.getElementById('stage-soap');
+        const stageRinse = document.getElementById('stage-rinse');
+        const stageDry = document.getElementById('stage-dry');
+
+        // State Machine Definitions
+        const STATES = {
+            IDLE: 'IDLE',
+            WAITING_FOR_CAR: 'WAITING FOR CAR',
+            ENTERING_BAY: 'ENTERING BAY',
+            SOAPING: 'SOAPING',
+            RINSING: 'RINSING',
+            DRYING: 'DRYING',
+            EXITING_BAY: 'EXITING BAY',
+            FINISHED: 'FINISHED',
+            E_STOP: 'E-STOP'
+        };
+
+        // PLC Variables
+        let currentState = STATES.IDLE;
+        let washTimer = null;
+        let carPosition = -100;
+        let sensorActive = {
+            entry: false,
+            wash: false,
+            exit: false
+        };
+
+        // Stage durations (in ms)
+        const STAGE_DURATIONS = {
+            SOAPING: 3000,
+            RINSING: 4000,
+            DRYING: 5000
+        };
+
+        // Function to update the UI based on the current state
+        function updateUI() {
+            statusDisplay.textContent = currentState;
+            statusDisplay.className = 'text-2xl font-bold ' + getStateColor(currentState);
+
+            // Update sensor lights
+            sensorEntry.classList.toggle('on', sensorActive.entry);
+            sensorWash.classList.toggle('on', sensorActive.wash);
+            sensorExit.classList.toggle('on', sensorActive.exit);
+
+            // Update wash stage lights
+            stageSoap.classList.toggle('active', currentState === STATES.SOAPING);
+            stageRinse.classList.toggle('active', currentState === STATES.RINSING);
+            stageDry.classList.toggle('active', currentState === STATES.DRYING);
+        }
+
+        // Function to get color for status display
+        function getStateColor(state) {
+            switch (state) {
+                case STATES.E_STOP:
+                    return 'text-red-600';
+                case STATES.SOAPING:
+                case STATES.RINSING:
+                case STATES.DRYING:
+                    return 'text-purple-600';
+                case STATES.FINISHED:
+                    return 'text-green-600';
+                default:
+                    return 'text-blue-600';
+            }
+        }
+
+        // --- State Machine Logic ---
+        function runCarWash() {
+            switch (currentState) {
+                case STATES.WAITING_FOR_CAR:
+                    // Check if car is ready to enter (simulated by start button press)
+                    // and transition to next state
+                    break;
+
+                case STATES.ENTERING_BAY:
+                    // Move the car into position
+                    carPosition += 1;
+                    if (carPosition > 150) {
+                        carPosition = 150;
+                        currentState = STATES.SOAPING;
+                    }
+                    car.style.left = `${carPosition}px`;
+                    // Update sensor status based on car position
+                    sensorActive.entry = carPosition > 20 && carPosition < 100;
+                    sensorActive.wash = carPosition > 120 && carPosition < 380;
+                    break;
+
+                case STATES.SOAPING:
+                    // Start timer for soaping phase
+                    if (!washTimer) {
+                        washTimer = setTimeout(() => {
+                            currentState = STATES.RINSING;
+                            washTimer = null;
+                        }, STAGE_DURATIONS.SOAPING);
+                    }
+                    break;
+
+                case STATES.RINSING:
+                    // Start timer for rinsing phase
+                    if (!washTimer) {
+                        washTimer = setTimeout(() => {
+                            currentState = STATES.DRYING;
+                            washTimer = null;
+                        }, STAGE_DURATIONS.RINSING);
+                    }
+                    break;
+
+                case STATES.DRYING:
+                    // Start timer for drying phase
+                    if (!washTimer) {
+                        washTimer = setTimeout(() => {
+                            currentState = STATES.EXITING_BAY;
+                            washTimer = null;
+                        }, STAGE_DURATIONS.DRYING);
+                    }
+                    break;
+                
+                case STATES.EXITING_BAY:
+                    // Move the car out of the bay
+                    carPosition += 1;
+                    car.style.left = `${carPosition}px`;
+                    // Update sensor status
+                    sensorActive.wash = carPosition > 120 && carPosition < 380;
+                    sensorActive.exit = carPosition > 400 && carPosition < 550;
+                    if (carPosition > 550) {
+                        currentState = STATES.FINISHED;
+                    }
+                    break;
+
+                case STATES.FINISHED:
+                    // Final state, clear all sensors
+                    sensorActive.entry = false;
+                    sensorActive.wash = false;
+                    sensorActive.exit = false;
+                    break;
+                
+                case STATES.E_STOP:
+                    // All processes halted
+                    clearTimeout(washTimer);
+                    break;
+
+                default:
+                    // IDLE state, do nothing
+                    break;
+            }
+
+            // Update the UI in every frame
+            updateUI();
+            requestAnimationFrame(runCarWash);
+        }
+
+        // --- Event Listeners and Button Logic ---
+        startBtn.addEventListener('click', () => {
+            if (currentState === STATES.IDLE || currentState === STATES.FINISHED) {
+                currentState = STATES.ENTERING_BAY;
+                carPosition = -100;
+                car.style.transition = 'left 15s linear';
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            clearTimeout(washTimer);
+            currentState = STATES.IDLE;
+            carPosition = -100;
+            car.style.transition = 'none';
+            car.style.left = `${carPosition}px`;
+            sensorActive.entry = false;
+            sensorActive.wash = false;
+            sensorActive.exit = false;
+            updateUI();
+        });
+
+        estopBtn.addEventListener('click', () => {
+            currentState = STATES.E_STOP;
+        });
+
+        // Start the simulation loop
+        requestAnimationFrame(runCarWash);
+    </script>
+</body>
+</html>
